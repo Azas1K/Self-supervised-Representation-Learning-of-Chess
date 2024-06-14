@@ -10,9 +10,10 @@ import seaborn as sns
 
 import networkx as nx
 from sklearn.model_selection import train_test_split
-from sklearn.linear_model import LinearRegression
+from sklearn.linear_model import LogisticRegression
 from sklearn import svm
-from sklearn import metrics
+from sklearn.metrics import accuracy_score
+from collections import Counter
 
 # plt.style.use('tableau-colorblind10')
 
@@ -124,7 +125,8 @@ def fool_write_tracking_netework(move, tracking_network, square_figure):
     start_square = chess.square_name(move.from_square)
     changed_squares = []
 
-    if (square_figure[start_square][0].lower()) =='n':
+    if (square_figure[start_square][0].lower()) == 'n' or \
+            square_figure[start_square][-1].lower()=='n':
         tracking_network[move.from_square][move.to_square] = 1
         return
 
@@ -271,8 +273,8 @@ games_results = []
 games_attack_matrix=[]
 games_positional_network = []
 games_tracking_network = []
-games_features = []
-games_positional_features = []
+games_features_positional = []
+games_features_traking = []
 games_shanon = []
 count=0
 
@@ -281,14 +283,17 @@ for file in files:
         game = chess.pgn.read_game(pgn)
 
         while game:
+
             result = game.headers['Result']
-            if result == '1-0' or result == '0-1':
+            board = game.board()
+
+            if (game.end().board().is_checkmate()):
+
                 # print(game.headers)
                 count_pieces = {'K': 1, 'k': 1, 'Q': 1, 'q': 1,
                                 'R': 2, 'r': 2, 'N': 2, 'n': 2,
                                 'B': 2, 'b': 2, 'P': 8, 'p': 8}
 
-                board = game.board()
 
                 corresponding_moves = {}  # ходы каждой фигуры за все время
                 square_figure = {}  # клетка и какая фигура на ней стоит
@@ -310,8 +315,8 @@ for file in files:
                 game_positional_network = []
                 game_tracking_network = []
                 game_attack_matrix = []
-                game_features=[]
-                game_features_positional = []
+                game_features_positional=[]
+                game_features_traking = []
                 game_shanon = []
 
                 for move in game.mainline_moves():
@@ -324,8 +329,8 @@ for file in files:
                     figure_attack = {}
                     positional_network = []
                     move_attack_matrix = []
-                    features = []
                     features_positional = []
+                    features_traking = []
 
                     white_legal_moves = 20 # start number of legal_moves
                     black_legal_moves = 20
@@ -372,92 +377,15 @@ for file in files:
                     fool_make_move_and_write_it(move, corresponding_moves,
                                                 square_figure, count_pieces)
 
-                    # features
+                    # positional features
                     move_singular_values = list(np.linalg.svd(move_attack_matrix)[1])[0:10]
-                    features = move_singular_values
+                    features_positional = move_singular_values
                     pos_net_graph = nx.DiGraph(np.array(positional_network) > 0)
 
                     graph = nx.DiGraph(np.array(positional_network) > 0)
 
 
                     min_deg_more0 = 128 #max number
-                    max_deg = 0
-                    avg_deg = 0
-                    for i in graph:
-                        degree = graph.degree(i)
-                        if degree < min_deg_more0:
-                            min_deg_more0 = degree
-
-                        if degree > max_deg:
-                            max_deg = degree
-
-                        avg_deg += degree
-                    features.append(min_deg_more0)
-                    features.append(max_deg)
-
-                    avg_deg /= 64
-                    features.append(avg_deg)
-
-                    density = nx.density(graph)
-                    features.append(density)
-
-                    count_edges = nx.number_of_edges(graph)
-                    features.append(count_edges)
-
-                    number_of_isolates = nx.number_of_isolates(graph)
-                    features.append(number_of_isolates)
-
-                    sorted_len_WCC = set([len(c) for c in sorted(nx.weakly_connected_components(graph), key=len)])
-                    sorted_len_WCC.discard(1)
-                    if len(sorted_len_WCC) == 0:
-                        sorted_len_WCC = [0]
-                    else:
-                        sorted_len_WCC = sorted(sorted_len_WCC)
-                    sorted_len_SCC = set([len(c) for c in sorted(nx.strongly_connected_components(graph), key=len)])
-                    sorted_len_SCC.discard(1)
-                    if len(sorted_len_SCC) == 0:
-                        sorted_len_SCC = [0]
-                    else:
-                        sorted_len_SCC = sorted(sorted_len_SCC)
-
-                    count_WCC = len(sorted_len_WCC)
-                    count_SCC = len(sorted_len_SCC)
-                    features.append(count_WCC)
-                    features.append(count_SCC)
-
-                    min_WCC = sorted_len_WCC[0]
-                    min_SCC = sorted_len_SCC[0]
-                    features.append(min_WCC)
-                    features.append(min_SCC)
-
-                    max_WCC = sorted_len_WCC[-1]
-                    max_SCC = sorted_len_SCC[-1]
-                    features.append(max_WCC)
-                    features.append(max_SCC)
-
-                    summ_WCC = sum(sorted_len_WCC)
-                    summ_SCC = sum(sorted_len_SCC)
-                    features.append(summ_WCC)
-                    features.append(summ_SCC)
-
-                    avg_WCC = summ_WCC/count_WCC
-                    avg_SCC = summ_SCC/count_SCC
-                    features.append(avg_WCC)
-                    features.append(avg_SCC)
-
-                    clustering_coeficcient = nx.average_clustering(graph)
-                    features.append(clustering_coeficcient)
-
-                    # features positional netework
-
-                    move_singular_values = list(
-                        np.linalg.svd(positional_network)[1])[0:10]
-                    features_positional = move_singular_values
-                    pos_net_graph = nx.DiGraph(np.array(positional_network) > 0)
-
-                    graph = nx.DiGraph(np.array(positional_network) > 0)
-
-                    min_deg_more0 = 64  # max number
                     max_deg = 0
                     avg_deg = 0
                     for i in graph:
@@ -484,17 +412,15 @@ for file in files:
                     number_of_isolates = nx.number_of_isolates(graph)
                     features_positional.append(number_of_isolates)
 
-                    sorted_len_WCC = set([len(c) for c in sorted(
-                        nx.weakly_connected_components(graph), key=len)])
+                    sorted_len_WCC = set([len(c) for c in sorted(nx.weakly_connected_components(graph), key=len)])
                     sorted_len_WCC.discard(1)
-                    if len(sorted_len_WCC)==0:
+                    if len(sorted_len_WCC) == 0:
                         sorted_len_WCC = [0]
                     else:
                         sorted_len_WCC = sorted(sorted_len_WCC)
-                    sorted_len_SCC = set([len(c) for c in sorted(
-                        nx.strongly_connected_components(graph), key=len)])
+                    sorted_len_SCC = set([len(c) for c in sorted(nx.strongly_connected_components(graph), key=len)])
                     sorted_len_SCC.discard(1)
-                    if len(sorted_len_SCC)==0:
+                    if len(sorted_len_SCC) == 0:
                         sorted_len_SCC = [0]
                     else:
                         sorted_len_SCC = sorted(sorted_len_SCC)
@@ -519,13 +445,91 @@ for file in files:
                     features_positional.append(summ_WCC)
                     features_positional.append(summ_SCC)
 
-                    avg_WCC = summ_WCC / count_WCC
-                    avg_SCC = summ_SCC / count_SCC
+                    avg_WCC = summ_WCC/count_WCC
+                    avg_SCC = summ_SCC/count_SCC
                     features_positional.append(avg_WCC)
                     features_positional.append(avg_SCC)
 
                     clustering_coeficcient = nx.average_clustering(graph)
                     features_positional.append(clustering_coeficcient)
+
+                    # features traking netework
+                    move_singular_values = list(
+                        np.linalg.svd(tracking_network)[1])[0:10]
+                    features_traking = move_singular_values
+                    pos_net_graph = nx.DiGraph(np.array(tracking_network) > 0)
+
+                    graph = nx.DiGraph(np.array(tracking_network) > 0)
+
+                    min_deg_more0 = 64  # max number
+                    max_deg = 0
+                    avg_deg = 0
+                    for i in graph:
+                        degree = graph.degree(i)
+                        if degree < min_deg_more0:
+                            min_deg_more0 = degree
+
+                        if degree > max_deg:
+                            max_deg = degree
+
+                        avg_deg += degree
+                    features_traking.append(min_deg_more0)
+                    features_traking.append(max_deg)
+
+                    avg_deg /= 64
+                    features_traking.append(avg_deg)
+
+                    density = nx.density(graph)
+                    features_traking.append(density)
+
+                    count_edges = nx.number_of_edges(graph)
+                    features_traking.append(count_edges)
+
+                    number_of_isolates = nx.number_of_isolates(graph)
+                    features_traking.append(number_of_isolates)
+
+                    sorted_len_WCC = set([len(c) for c in sorted(
+                        nx.weakly_connected_components(graph), key=len)])
+                    sorted_len_WCC.discard(1)
+                    if len(sorted_len_WCC)==0:
+                        sorted_len_WCC = [0]
+                    else:
+                        sorted_len_WCC = sorted(sorted_len_WCC)
+                    sorted_len_SCC = set([len(c) for c in sorted(
+                        nx.strongly_connected_components(graph), key=len)])
+                    sorted_len_SCC.discard(1)
+                    if len(sorted_len_SCC)==0:
+                        sorted_len_SCC = [0]
+                    else:
+                        sorted_len_SCC = sorted(sorted_len_SCC)
+
+                    count_WCC = len(sorted_len_WCC)
+                    count_SCC = len(sorted_len_SCC)
+                    features_traking.append(count_WCC)
+                    features_traking.append(count_SCC)
+
+                    min_WCC = sorted_len_WCC[0]
+                    min_SCC = sorted_len_SCC[0]
+                    features_traking.append(min_WCC)
+                    features_traking.append(min_SCC)
+
+                    max_WCC = sorted_len_WCC[-1]
+                    max_SCC = sorted_len_SCC[-1]
+                    features_traking.append(max_WCC)
+                    features_traking.append(max_SCC)
+
+                    summ_WCC = sum(sorted_len_WCC)
+                    summ_SCC = sum(sorted_len_SCC)
+                    features_traking.append(summ_WCC)
+                    features_traking.append(summ_SCC)
+
+                    avg_WCC = summ_WCC / count_WCC
+                    avg_SCC = summ_SCC / count_SCC
+                    features_traking.append(avg_WCC)
+                    features_traking.append(avg_SCC)
+
+                    clustering_coeficcient = nx.average_clustering(graph)
+                    features_traking.append(clustering_coeficcient)
 
                     # count Shannon evaluation function
                     Shanon = (count_pieces['K'] - count_pieces['k'])*500 + \
@@ -534,42 +538,45 @@ for file in files:
                              (count_pieces['N'] - count_pieces['n'] +
                              count_pieces['B'] - count_pieces['b']) * 3 + \
                              count_pieces['P'] - count_pieces['p'] + \
-                             white_legal_moves - black_legal_moves * 0.1
-                    if Shanon > 0:
-                        Shanon = 1
-                    elif Shanon < 0:
-                        Shanon = -1
+                             (white_legal_moves - black_legal_moves) * 0.1
+                    # if Shanon > 0:
+                    #     Shanon = 1
+                    # elif Shanon < 0:
+                    #     Shanon = -1
 
                     # updating all matrixes with data for this move
                     game_attack_matrix.append(move_attack_matrix)
                     game_tracking_network.append(tracking_network)
                     game_positional_network.append(positional_network)
-                    game_features.append(features)
                     game_features_positional.append(features_positional)
+                    game_features_traking.append(features_traking)
                     game_shanon.append(Shanon)
 
                     # next_move
                     board.push(move)
 
-            # updating
-            games_attack_matrix.append(game_attack_matrix)
-            games_positional_network.append(game_positional_network)
-            games_tracking_network.append(game_tracking_network)
-            games_features.append(game_features)
-            games_positional_features.append(game_features_positional)
-            games_results.append(result)
-            games_shanon.append(game_shanon)
+                # updating
+                games_attack_matrix.append(game_attack_matrix)
+                games_positional_network.append(game_positional_network)
+                games_tracking_network.append(game_tracking_network)
+                games_features_positional.append(game_features_positional)
+                games_features_traking.append(game_features_traking)
+                games_results.append(result)
+                games_shanon.append(game_shanon)
 
-            # limiting on how much games we need
-            count += 1
-            print(count)
-            # print(count_pieces)
-            if count==10:
-                break
+                # limiting on how much games we need
+                count += 1
+                print(count/20)
+
+                if count==2000:
+                    break
+                else:
+                    game = chess.pgn.read_game(pgn)
+
             else:
                 game = chess.pgn.read_game(pgn)
 
-    if count==10:
+    if count==2000:
         break
 
 # print(len(games_attack_matrix), len(games_positional_network), len(games_tracking_network))
@@ -578,18 +585,27 @@ df = pd.DataFrame(data={'Result': games_results,
                         'Game_attack_matrix': games_attack_matrix,
                         'Positional_network': games_positional_network,
                         'Tracking_network': games_tracking_network,
-                        'Features': games_features,
+                        'Features_positional': games_features_positional,
                         'Shanon': games_shanon,
-                        'Features_positional': games_positional_features
+                        'Features_traking': games_features_traking
                         })
 
-# print(df.head(10))
 
-max_moves_number = df['Features'].str.len().max()
+# df = pd.read_csv('database.csv', delimiter='\t')
+print(df['Result'].value_counts())
+print(df.head(10))
+
+
+max_moves_number = df['Features_positional'].str.len().max()
+avg_moves_number = df['Features_positional'].str.len().mean()
+print(max_moves_number)
+print(avg_moves_number)
 # df_features = df_features.replace(np.nan, 0)
+
+
 columns_names = []
 for i in range(max_moves_number):
-    for j in range(len(df.iloc[0]['Features'][0])):
+    for j in range(len(df.iloc[0]['Features_positional'][0])):
         columns_names.append(f'{i}_{j}')
 df_features = pd.DataFrame(columns=columns_names)
 # print(df_features)
@@ -597,68 +613,93 @@ df_features = pd.DataFrame(columns=columns_names)
 
 for i in range(df.shape[0]):
     features_vector = []
-    for j in range(len(df.iloc[i]['Features'])):
-        for k in range(len(df.iloc[i]['Features'][0])):
-            features_vector.append(df.iloc[i]['Features'][j][k])
-    if len(df.iloc[i]['Features']) < max_moves_number:
-        features_vector.extend([0]*(max_moves_number-len(df.iloc[i]['Features']))*len(df.iloc[i]['Features'][0]))
+    for j in range(len(df.iloc[i]['Features_positional'])):
+        for k in range(len(df.iloc[i]['Features_positional'][0])):
+            features_vector.append(df.iloc[i]['Features_positional'][j][k])
+    if len(df.iloc[i]['Features_positional']) < max_moves_number:
+        features_vector = features_vector[0:27]*(max_moves_number-len(df.iloc[i]['Features_positional'])) + features_vector
     df_features.loc[i] = features_vector
 
 # print(df_features)
 
 
-max_moves_number = df['Features_positional'].str.len().max()
 columns_names = []
 for i in range(max_moves_number):
-    for j in range(len(df.iloc[0]['Features_positional'][0])):
+    for j in range(len(df.iloc[0]['Features_traking'][0])):
         columns_names.append(f'{i}_{j}')
 df_features_posotional = pd.DataFrame(columns=columns_names)
 
 for i in range(df.shape[0]):
     features_vector = []
-    for j in range(len(df.iloc[i]['Features_positional'])):
-        for k in range(len(df.iloc[i]['Features_positional'][0])):
-            features_vector.append(df.iloc[i]['Features_positional'][j][k])
-    if len(df.iloc[i]['Features_positional']) < max_moves_number:
-        features_vector.extend([0]*(max_moves_number-len(df.iloc[i]['Features_positional']))*len(df.iloc[i]['Features_positional'][0]))
+    for j in range(len(df.iloc[i]['Features_traking'])):
+        for k in range(len(df.iloc[i]['Features_traking'][0])):
+            features_vector.append(df.iloc[i]['Features_traking'][j][k])
+    if len(df.iloc[i]['Features_traking']) < max_moves_number:
+        features_vector = features_vector[0:27]*(max_moves_number-len(df.iloc[i]['Features_traking'])) + features_vector
     df_features_posotional.loc[i] = features_vector
 
-df_shanon = pd.DataFrame((df["Shanon"].to_list())).replace(np.nan, 0)
+df_shanon = pd.DataFrame(columns=range(max_moves_number))
+for i in range(df.shape[0]):
+    shanons_vector = []
+    for j in range(len(df.iloc[i]['Shanon'])):
+        shanons_vector.append(df.iloc[i]['Shanon'][j])
+    if len(df.iloc[i]['Shanon']) < max_moves_number:
+        shanons_vector = ([0]*(max_moves_number-len(df.iloc[i]['Shanon']))) + shanons_vector
+    df_shanon.loc[i] = shanons_vector
 
 
-df_features_posotional['Result'] = np.where(df["Result"]=="1-0", 1, -1)
-df_features['Result'] = np.where(df["Result"]=="1-0", 1, -1)
-df_shanon['Result'] = np.where(df["Result"]=="1-0", 1, -1)
+df_features_posotional['Result'] = np.where(df["Result"]=='1-0', True, False)
+df_features['Result'] = np.where(df["Result"]=='1-0', True, False)
+df_shanon['Result'] = np.where(df["Result"]=='1-0', True, False)
 
 print(df_features_posotional)
 print(df_features)
 print(df_shanon)
 
+df_features_posotional.to_csv('database_traking.csv', sep='\t', index=False)
+df_features.to_csv('database_positional.csv', sep='\t', index=False)
+df_shanon.to_csv('database_shanon.csv', sep='\t', index=False)
+
 target = 'Result'
-X_train_features, X_test_features, y_train_features, y_test_features = train_test_split(df_features.drop(columns=[target]), df_features[target], test_size=0.2)
 
 results = []
-for i in range(max_moves_number):
-    if i >= 10:
-        model = LinearRegression()
-        X_train_shan, X_test_shan, y_train_shan, y_test_shan = train_test_split(df_shanon.drop(columns=[target]).iloc[:, i-10:i], df_shanon[target], test_size=0.2)
+model = LogisticRegression(
+    class_weight='balanced'
+)
+
+
+for i in range(max_moves_number-1, 1, -1):
+    if i >= 7:
+        df_model = pd.DataFrame(df_shanon.iloc[:, i-7:i])
+        X_train_shan, X_test_shan, y_train_shan, y_test_shan = train_test_split(df_model, df_shanon[target], test_size=0.2)
         model.fit(X_train_shan, y_train_shan)
         y_predicted = model.predict(X_test_shan)
-        print(f"Test R2: { metrics.r2_score(y_test_shan, y_predicted)}")
     else:
-        model = LinearRegression()
+        df_model = pd.DataFrame(df_shanon.iloc[:, 0:i])
         X_train_shan, X_test_shan, y_train_shan, y_test_shan = train_test_split(
-            df_shanon.drop(columns=[target]).iloc[:, 0:i],
+            df_model,
             df_shanon[target], test_size=0.2)
         model.fit(X_train_shan, y_train_shan)
         y_predicted = model.predict(X_test_shan)
-        print(f"Test R2: {metrics.r2_score(y_test_shan, y_predicted)}")
+    print(f"Test R2: {accuracy_score(y_test_shan, y_predicted)}")
+    print(Counter(y_predicted))
+    results.append(accuracy_score(y_test_shan, y_predicted))
+
+plt.plot(results)
+plt.show()
 
 
 
-
-# print(df.iloc[0]['Tracking_network'][-1])
-
+# G = nx.DiGraph(np.array(df.iloc[0]['Positional_network'][-1])>0)
+# H = nx.relabel_nodes(G, lambda x: chess.square_name(x-1))
+# print(H.degree())
+# if nx.is_planar(H):
+#     nx.draw_planar(H, with_labels=True)
+# else:
+#     nx.draw_kamada_kawai(H, with_labels=True)
+# plt.title('Positional_network')
+# plt.show()
+#
 # G = nx.DiGraph(np.array(df.iloc[0]['Tracking_network'][-1])>0)
 # H = nx.relabel_nodes(G, lambda x: chess.square_name(x-1))
 # print(H.degree())
@@ -666,24 +707,5 @@ for i in range(max_moves_number):
 #     nx.draw_planar(H, with_labels=True)
 # else:
 #     nx.draw_kamada_kawai(H, with_labels=True)
-# plt.show()
-
-# for i in range(10):
-#     sns.lineplot(
-#         x=range(np.size(df.iloc[0]['Game_singular_values'], 0)),
-#         y=[row[i] for row in df.iloc[0]['Game_singular_values']],
-#         label=f'{i+1} синг. число')
-# plt.xlabel("Полуходы")
-# plt.title('Значения первых 10 сингулярных чисел')
-# plt.ylabel("Значения синг. числа")
-# plt.show()
-
-# plt.figure(figsize=(20, 10))
-# for i in range(10):
-#     sns.lineplot(x=range(np.size(df.iloc[i]['Game_singular_values'], 0)),
-#                  y=[row[0] for row in df.iloc[i]['Game_singular_values']],
-#                  label=df.iloc[i]['ECO'])
-# plt.xlabel("Полуходы")
-# plt.title('Первые сингулярные числа для шахматных партий')
-# plt.ylabel("Значения синг. числа")
+# plt.title('Tracking_network')
 # plt.show()
